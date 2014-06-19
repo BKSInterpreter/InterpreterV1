@@ -83,7 +83,8 @@ int sc_main(int argc, char* argv []){
 	sc_signal<sc_lv<DATA_WIDTH*2> > mul_op_result;
 	sc_signal<sc_lv<INSTRUCTION_WIDTH> > opcode;
 	sc_signal<bool> overflow;
-	sc_signal<bool> enable_adder;
+	sc_signal<bool> enable_alu;
+	sc_signal<bool> enable_mul;
 	sc_signal<bool> enable_ram;
 	sc_signal<bool> clock;
 
@@ -94,7 +95,8 @@ int sc_main(int argc, char* argv []){
 		Adder.opA(opA);
 		Adder.opB(opB);
 		Adder.overflow(overflow);
-		Adder.enable_adder(enable_adder);
+		Adder.enable_alu(enable_alu);
+		Adder.enable_mul(enable_mul);
 		Adder.clock(clock);
 
 	sp_ram Memory("MEM", ramfile);
@@ -112,7 +114,8 @@ int sc_main(int argc, char* argv []){
 	sc_trace(wave, opA, "opA");
 	sc_trace(wave, opB, "opB");
 	sc_trace(wave, overflow, "overflow");
-	sc_trace(wave, enable_adder, "enable_adder");
+	sc_trace(wave, enable_alu, "enable_alu");
+	sc_trace(wave, enable_mul, "enable_mul");
 	sc_trace(wave, enable_ram, "enable_ram");
 	sc_trace(wave, clock, "clock");
 	sc_trace(wave, address1, "address1");
@@ -133,7 +136,8 @@ int sc_main(int argc, char* argv []){
 
 	//Turn us on...
 	enable_ram = true;
-	enable_adder = true;
+	enable_alu = true;
+	enable_mul = true;
 
 	//Read and begin executing instructions.
 	std::string ln;
