@@ -1,174 +1,267 @@
 #include "systemc.h"
-#include <string>
-//#include <fstream>
-#include <iostream>
-
-#include "sp_ram.cpp"
-//#include "adder.cpp"
-
-//#include "shared_parameters.h"
-
-//I would very much like to implement a less hackish system
-//for parsing the input strings.
-int parse(std::string lng){
-	if(lng == OW_NOP){
-		return OP_NOP;
-	}
-	if(lng == OW_ABS){
-		return OP_ABS;
-	}
-	if(lng == OW_ADD){
-		return OP_ADD;
-	}
-	if(lng == OW_SUB){
-		return OP_SUB;
-	}
-	if(lng == OW_AND){
-		return OP_AND;
-	}
-	if(lng == OW_ROR){
-		return OP_OR;
-	}
-	if(lng == OW_XOR){
-		return OP_XOR;
-	}
-	if(lng == OW_NOR){
-		return OP_NOR;
-	}
-	if(lng == OW_SLL){
-		return OP_SLL;
-	}
-	if(lng == OW_SRL){
-		return OP_SRL;
-	}
-	if(lng == OW_SRA){
-		return OP_SRA;
-	}
-	if(lng == OW_INT_SMUL){
-		return OP_INT_SMUL;
-	}
-	if(lng == OW_INT_UMUL){
-		return OP_INT_UMUL;
-	}
-	if(lng == OW_INT_FSMUL){
-		return OP_INT_FSMUL;
-	}
-	if(lng == OW_INT_FUMUL){
-		return OP_INT_FUMUL;
-	}
-	cout << "Error. Opstring not recognized.";
-	return 0;
-}
-
-int sc_main(int argc, char* argv []){
-	sc_report_handler::set_actions("/IEEE_Std_1666/deprecated", SC_DO_NOTHING);
+#include "shared_parameters.h"
+SC_MODULE(alu){
+	sc_in<sc_lv<INSTRUCTION_WIDTH> > opcode;
+	sc_out<sc_lv<DATA_WIDTH> > alu_op_result;
+	sc_out<sc_lv<DATA_WIDTH*2> > mul_op_result;
+	sc_in<sc_lv<DATA_WIDTH> > opA;
+	sc_in<sc_lv<DATA_WIDTH> > opB;
+	sc_out<bool> overflow;
+	sc_in<bool> enable_alu;
+	sc_in<bool> enable_mul;
 	
-	if(argc != 3){
-		cout << "Basic adder and memory simulation.\n";
-		cout << "Argument 1: Location of instruction file.\n";
-		cout << "Argument 2: Location of data file.\n";
-		return 0;
+	sc_in_clk clock;
+
+	SC_CTOR(alu){
+		SC_METHOD(think);
+		sensitive << clock.pos();
 	}
 	
-	const char * ramfile = argv[2];
-	
-	//Now that we have the size of our ram, we can actually construct
-	//the modules we will be simulating.
-	
-	sc_signal<sc_lv<DATA_WIDTH> > address1;
-	sc_signal<sc_lv<DATA_WIDTH> > address2;
-	sc_signal<sc_lv<DATA_WIDTH> > opA;
-	sc_signal<sc_lv<DATA_WIDTH> > opB;
-	sc_signal<sc_lv<DATA_WIDTH> > alu_op_result;
-	sc_signal<sc_lv<DATA_WIDTH*2> > mul_op_result;
-	sc_signal<sc_lv<INSTRUCTION_WIDTH> > opcode;
-	sc_signal<bool> overflow;
-	sc_signal<bool> enable_alu;
-	sc_signal<bool> enable_mul;
-	sc_signal<bool> enable_ram;
-	sc_signal<bool> clock;
-
-	alu Adder("ADDER");
-		Adder.alu_op_result(alu_op_result);
-		Adder.mul_op_result(mul_op_result);
-		Adder.opcode(opcode);
-		Adder.opA(opA);
-		Adder.opB(opB);
-		Adder.overflow(overflow);
-		Adder.enable_alu(enable_alu);
-		Adder.enable_mul(enable_mul);
-		Adder.clock(clock);
-
-	sp_ram Memory("MEM", ramfile);
-		Memory.opA(opA);
-		Memory.opB(opB);
-		Memory.address1(address1);
-		Memory.address2(address2);
-		Memory.enable_ram(enable_ram);
-		Memory.clock(clock);
-
-	//Set up monitoring.
-	sc_trace_file *wave = sc_create_vcd_trace_file("mem_and_add");
-	sc_trace(wave, alu_op_result, "alu_op_result");
-	sc_trace(wave, mul_op_result, "mul_op_result");
-	sc_trace(wave, opA, "opA");
-	sc_trace(wave, opB, "opB");
-	sc_trace(wave, overflow, "overflow");
-	sc_trace(wave, enable_alu, "enable_alu");
-	sc_trace(wave, enable_mul, "enable_mul");
-	sc_trace(wave, enable_ram, "enable_ram");
-	sc_trace(wave, clock, "clock");
-	sc_trace(wave, address1, "address1");
-	sc_trace(wave, address2, "address2");
-		
-	sc_start(1);
-
-	//Open the instructions file.
-	const char * instfile = argv[1];
-	std::fstream instructions_list;
-	instructions_list.open(instfile);
-	if(!(instructions_list.is_open())){
-		cout << "ERROR: instruction file " << instfile;
-		cout << " does not exist";
-		cout << " or cannot be opened.\n";
-		return 0;
-	}
-
-	//Turn us on...
-	enable_ram = true;
-	enable_alu = true;
-	enable_mul = true;
-
-	//Read and begin executing instructions.
-	std::string ln;
-	while(true){
-		std::string ln;
-		getline(instructions_list, ln);
-		if(instructions_list.eof()){
-			break;
+	void think(){	
+		int code = opcode.read().to_uint();
+		//cout << "\n" << code << ", " << OP_INT_SMUL << "\n";
+		switch(code){
+			case OP_NOP:
+				if(enable_alu.read()){
+					nop();
+				}
+				break;
+			case OP_ABS:
+				if(enable_alu.read()){
+					abs();
+				}
+				break;
+			case OP_ADD:
+				if(enable_alu.read()){
+					add();
+				}
+				break;
+			case OP_SUB:
+				if(enable_alu.read()){
+					sub();
+				}
+				break;
+			case OP_AND:
+				if(enable_alu.read()){
+					land();
+				}
+				break;
+			case OP_OR:
+				if(enable_alu.read()){
+					lor();
+				}
+				break;
+			case OP_XOR:
+				if(enable_alu.read()){
+					lxor();
+				}
+				break;
+			case OP_NOR:
+				if(enable_alu.read()){
+					lnor();
+				}
+				break;
+			case OP_SLL:
+				if(enable_alu.read()){
+					sll();
+				}
+				break;
+			case OP_SRL:
+				if(enable_alu.read()){
+					srl();
+				}
+				break;
+			case OP_SRA:
+				if(enable_alu.read()){
+					sra();
+				}
+				break;
+			case OP_INT_SMUL:
+				if(enable_mul.read()){
+					signmul();
+				}
+				break;
+			case OP_INT_UMUL:
+				if(enable_mul.read()){
+					unsignmul();
+				}
+				break;
+			case OP_INT_FSMUL:
+				if(enable_mul.read()){
+					fsignmul();
+				}
+				break;
+			case OP_INT_FUMUL:
+				if(enable_mul.read()){
+					funsignmul();
+				}
+				break;
 		}
-		
-		std::string opstr = ln.substr(0,
-		ln.find_first_of(" ")).c_str();
-		
-		int add1 = std::stoi(ln.substr(ln.find_first_of(" ") + 1,
-		ln.find_first_of(",")).c_str());
-		
-		int add2 = std::stoi(ln.substr(ln.find_first_of(",")+1,
-		ln.length()-1).c_str());
-		
-		address1.write(add1);
-		address2.write(add2);
-		opcode.write(parse(opstr));
-		
-		clock.write(0);
-		sc_start(1);
-		clock.write(1);
-		sc_start(1);
 	}
-	clock.write(0);
-	sc_start(1);
-	clock.write(1);
-	sc_start(1);
-	sc_close_vcd_trace_file(wave);
-}
+	
+	void nop(){
+		cout << alu_op_result.read().to_int();
+		cout << "\n";
+		overflow.write(false);
+		cout << opA.read().to_int() << " _ ";
+		cout << opB.read().to_int() << " = ";
+		alu_op_result.write(opA.read());
+	}
+	
+	void abs(){
+		cout << opA.read().to_int() << " || ";
+		cout << opB.read().to_int() << " = ";
+		int tmp = std::abs(opA.read().to_int());
+		overflow.write(false);
+		alu_op_result.write(tmp);
+		cout << alu_op_result.read().to_int();
+		cout << "\n";
+	}
+	
+	void add(){
+	cout << opA.read().to_int() << " + ";
+		cout << opB.read().to_int() << " = ";
+		int tmp = opA.read().to_int() + opB.read().to_int();
+		if(tmp > (pow(2, DATA_WIDTH-1) - 1) || tmp < -1 * pow(2, DATA_WIDTH-1)){
+			overflow.write(true);
+			alu_op_result.write(tmp);
+		}
+		else{
+			overflow.write(false);
+			alu_op_result.write(tmp);
+		}
+		cout << alu_op_result.read().to_int();
+		cout << "\n";
+	}
+	
+	void sub(){
+		cout << opA.read().to_int() << " - ";
+		cout << opB.read().to_int() << " = ";
+		int tmp = opA.read().to_int() - opB.read().to_int();
+		if(tmp > (pow(2, DATA_WIDTH-1) - 1) || tmp < -1 * pow(2, DATA_WIDTH-1)){
+			overflow.write(true);
+			alu_op_result.write(tmp);
+		}
+		else{
+			overflow.write(false);
+			alu_op_result.write(tmp);
+		}
+		cout << alu_op_result.read().to_int();
+		cout << "\n";
+	}
+	
+	void land(){
+		cout << opA.read() << " & ";
+		cout << opB.read() << " = ";
+		overflow.write(false);
+		alu_op_result = opA.read() & opB.read();
+		cout << alu_op_result.read();
+		cout << "\n";
+	}
+	
+	void lor(){
+		cout << opA.read() << " | ";
+		cout << opB.read() << " = ";
+		overflow.write(false);
+		alu_op_result = opA.read() | opB.read();
+		cout << alu_op_result.read();
+		cout << "\n";
+	}
+	
+	void lxor(){
+		cout << opA.read() << " ^ ";
+		cout << opB.read() << " = ";
+		overflow.write(false);
+		alu_op_result = opA.read() ^ opB.read();
+		cout << alu_op_result.read();
+		cout << "\n";
+	}
+	
+	void lnor(){
+		cout << opA.read() << " !| ";
+		cout << opB.read() << " = ";
+		overflow.write(false);
+		alu_op_result = ~(opA.read() | opB.read());
+		cout << alu_op_result.read();
+		cout << "\n";
+	}
+	
+	void sll(){
+		cout << opA.read() << " << ";
+		cout << opB.read() << " = ";
+		overflow.write(false);
+		int tmp = opA.read().to_int() << opB.read().to_int();
+		//Going to redo these later so that sizes greater than the c++ int work.
+		alu_op_result.write(tmp);
+		cout << alu_op_result.read();
+		cout << "\n";
+	}
+	
+	void srl(){
+		cout << opA.read() << " >> ";
+		cout << opB.read() << " = ";
+		overflow.write(false);
+		int tmp = opA.read().to_int() >> opB.read().to_int();
+		//Going to redo these later so that sizes greater than the c++ int work.
+		alu_op_result.write(tmp);
+		cout << alu_op_result.read();
+		cout << "\n";
+	}
+	
+	void sra(){//Arithmetic right shifts are
+	//a little bit bizarre, so I'm doing this
+	//manually (i.e. not with ints).
+		cout << opA.read() << " >>> ";
+		cout << opB.read() << " = ";
+		overflow.write(false);
+		sc_lv<DATA_WIDTH> tmp = opA.read();
+		for(int i = 0; i < opB.read().to_int(); i++){
+			for(int i = 0; i < DATA_WIDTH -1; i ++){
+				tmp[i+1] = tmp[i];
+			}
+		}
+		alu_op_result.write(tmp);
+		cout << alu_op_result.read();
+		cout << "\n";
+	}
+	
+	void signmul(){
+		cout << opA.read().to_int() << " * ";
+		cout << opB.read().to_int() << " = ";
+		overflow.write(false);
+		int tmp = opA.read().to_int() * opB.read().to_int();
+		mul_op_result.write(tmp);
+		cout << alu_op_result.read().to_int();
+		cout << "\n";
+	}
+	
+	void unsignmul(){
+		cout << opA.read().to_uint() << " |*| ";
+		cout << opB.read().to_uint() << " = ";
+		overflow.write (false);
+		unsigned int tmp = opA.read().to_uint() * opB.read().to_uint();
+		mul_op_result.write(tmp);
+		cout << alu_op_result.read().to_uint();
+		cout << "\n";
+	}
+	
+	void fsignmul(){
+		cout << opA.read().to_int() << " .* ";
+		cout << opB.read().to_int() << " = ";
+		overflow.write(false);
+		int tmp = (opA.read().to_int() * opB.read().to_int()) >> 15;
+		mul_op_result.write(tmp);
+		cout << alu_op_result.read().to_int();
+		cout << "\n";
+	}
+	
+	void funsignmul(){
+		cout << opA.read().to_int() << " |.*| ";
+		cout << opB.read().to_int() << " = ";
+		overflow.write(false);
+		unsigned int tmp = (opA.read().to_uint() * opB.read().to_uint()) >> 15;
+		mul_op_result.write(tmp);
+		cout << alu_op_result.read().to_uint();
+		cout << "\n";
+	}
+};
